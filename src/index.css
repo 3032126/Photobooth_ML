@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+.photo-placeholder {
+    position: absolute;
+    left: 2.85%;
+    right: 2.85%;
+    top: 3.73%;
+    bottom: 69.81%;
+    background: #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+  }
+  
