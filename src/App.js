@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import PhotoBooth from "./components/PhotoBooth";
 import AboutUs from "./components/AboutUs";
 import PhotoStrip from "./components/PhotoStrip";
+import PhotoStripPreview from "./components/PhotoStripPreview";
+
 import "./index.css";
 
 function App() {
@@ -18,7 +20,7 @@ function App() {
               </Link>
             </div>
             <div className="hidden lg:flex lg:gap-x-12">
-              <Link to="/" className="text-sm font-semibold text-gray-900">  {/* ✅ Fixed Home Link */}
+              <Link to="/" className="text-sm font-semibold text-gray-900">  {/* Fixed Home Link */}
                 Home
               </Link>
               <Link to="/photostrip" className="text-sm font-semibold text-gray-900">
@@ -64,6 +66,7 @@ function App() {
           <Route path="/about" element={<AboutUs />} />
           <Route path="/photostrip" element={<PhotoStrip />} />
           <Route path="/photobooth" element={<PhotoBooth />} />
+          <Route path="/photostrip-preview" element={<PhotoStripPreview />} />
         </Routes>
       </div>
     </Router>

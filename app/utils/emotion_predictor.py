@@ -4,17 +4,13 @@ from .image_utils import prepare_image
 
 # แปลงหมายเลขคลาสเป็นชื่ออารมณ์
 emotion_labels = {
-    0: 'angry',
-    1: 'contempt',
-    2: 'disgust',
-    3: 'fear',
-    4: 'happy',
-    5: 'sad',
-    6: 'surprise'
+    0: 'happy',
+    1: 'sad',
+    2: 'surprise'
 }
 
 # โหลดโมเดลที่เคยเทรนด์ไว้
-model = tf.keras.models.load_model('model/CK_model.h5', compile=False)
+model = tf.keras.models.load_model('model/model.h5', compile=False)
 
 # ฟังก์ชันทำนายอารมณ์
 def predict_emotion(face):
