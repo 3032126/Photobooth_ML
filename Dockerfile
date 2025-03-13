@@ -23,9 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends supervisor && r
 # ตั้งค่า directory สำหรับ backend
 WORKDIR /Photobooth_ML/app
 
-# คัดลอกไฟล์ทั้งหมด รวมถึง backend
-COPY --from=frontend /Photobooth_ML/build ./frontend
-COPY server.py requirements.txt ./ 
+# คัดลอกไฟล์ทั้งหมดของ backend
+COPY app /Photobooth_ML/app
 
 # ติดตั้ง Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
