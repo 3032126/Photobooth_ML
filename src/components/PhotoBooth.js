@@ -40,7 +40,8 @@ const PhotoBooth = () => {
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-100">
       <h1 className="text-4xl font-bold text-purple-700">Photobooth</h1>
-      <h2 className="text-xl font-medium text-gray-700">Selected Emotion: {selectedEmotion}</h2>
+      <h2 className="mt-6 text-xl font-medium text-gray-700">Selected Emotion: {selectedEmotion}</h2>
+
 
       {/* Live Video Feed */}
       <div className="relative">
