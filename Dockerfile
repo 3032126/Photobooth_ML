@@ -1,19 +1,18 @@
-#From baseimage
+# From base image
 FROM node:20-alpine3.17
 
-#work in container
+# Set working directory
 WORKDIR /Photobooth_ML/
 
-#file docker to container copy .. = copy in same folder docker to  Photobooth_ML
+# Copy files into container
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Copy the rest of the project
 COPY . .
 
-#if run use || you don't have nmp you can use "RUN npm install" 
-RUN npm --version
-#RUN npm instal
-
-#EXPOSE port
+# Expose port
 EXPOSE 3000
 
+# Start application
 CMD ["npm", "start"]
-
-
