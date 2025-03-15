@@ -1,70 +1,47 @@
-# Getting Started with Create React App
+Photo Booth with Emotion-Based Auto-Capture
+เกี่ยวกับโปรเจกต์
+โปรเจกต์นี้เป็น Photo Booth ที่สามารถถ่ายรูปโดยอัตโนมัติเมื่อ AI ตรวจจับอารมณ์ที่ผู้ใช้เลือก (Happy, Sad, Fear, etc.) และสร้าง Photo Strip ออกมาให้ดาวน์โหลดได้ 📷✨
+Live Camera Feed พร้อมตรวจจับใบหน้า
+Emotion-Based Auto-Capture: ถ่ายภาพเมื่ออารมณ์ที่เลือกตรงกับ AI
+Custom Frame Color: ผู้ใช้สามารถเลือกสีของกรอบได้
+Photo Strip Generation: รวมภาพ 3 รูปเป็นแถบภาพที่มีสีกรอบที่เลือก
+Download Photo Strip ได้ง่ายๆ
+การติดตั้ง & การใช้งาน
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Clone Repo
+git clone https://github.com/your-repo/photo-booth.git
 
-## Available Scripts
+cd photo-booth
+รัน Backend
+python server.py
 
-In the project directory, you can run:
+ติดตั้ง Frontend
+cd frontend
+npm install
 
-### `npm start`
+รัน Frontend
+npm start
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+การทำงานของโปรเจกต์
+1. เริ่มต้นใช้งาน
+   ![Screenshot 2025-03-15 171928](https://github.com/user-attachments/assets/82e759ff-e113-4bac-b783-56a623ea5c3c)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+2. เลือก สีของกรอบรูป เลือก อารมณ์ที่ต้องการให้กล้องจับภาพ
+  ![Screenshot 2025-03-15 171944](https://github.com/user-attachments/assets/35d75f62-6bdc-4035-bfae-6bb1d6974b12)
+3. Live Camera & Auto Capture
+เมื่อกล้องตรวจจับใบหน้าและตรงกับอารมณ์ที่เลือก → จะเริ่มนับถอยหลังแล้วถ่ายอัตโนมัติ
+ถ่ายครบ 3 รูป → หยุดการถ่าย และสร้าง Photo Strip
+   ![Screenshot 2025-03-15 172953](https://github.com/user-attachments/assets/57ef5f51-9c3f-406a-a766-b6ce3b0a5ac7)
+5. Photo Strip Preview
+แสดงแถบภาพที่สร้างขึ้น
+สามารถ Download Photo Strip หรือ ถ่ายใหม่ได้
+  ![Screenshot 2025-03-15 172335](https://github.com/user-attachments/assets/e1b44fb4-366d-4a6f-94ce-36f0ec7adbd0)
+Frontend
+-React
+-TailwindCSS
+-React Router
+Backend
+-Flask
+-OpenCV 
+-Machine Learning Model 
 
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
