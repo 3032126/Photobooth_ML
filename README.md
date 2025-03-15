@@ -9,8 +9,6 @@ Download Photo Strip ได้ง่ายๆ
 <br >การติดตั้ง & การใช้งาน </br>
 
 Clone Repo
-git clone https://github.com/your-repo/photo-booth.git
-
 cd photo-booth
 รัน Backend
 python server.py
