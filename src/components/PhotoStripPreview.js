@@ -9,11 +9,19 @@ const PhotoStripPreview = () => {
   const API_URL = process.env.REACT_APP_API_URL;
 
 const handleResetCapture = async () => {
-  await fetch(`${process.env.REACT_APP_API_URL}/reset_capture`, {
-    method: "POST",
-  });
+  try {
+    const response = await fetch(`${API_URL}/reset_capture`, {
+      method: "POST",
+    });
 
-  navigate("/photobooth");
+    if (!response.ok) {
+      throw new Error(`Reset failed: ${response.status}`);
+    }
+
+    navigate("/photobooth");
+  } catch (error) {
+    console.error("Error resetting capture:", error);
+  }
 };
 
   return (

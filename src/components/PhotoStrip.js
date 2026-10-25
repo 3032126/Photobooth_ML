@@ -15,15 +15,17 @@ function PhotoStrip() {
   const [selectedFrame, setSelectedFrame] = useState(frameColors[0].color);
   const [selectedEmotion, setSelectedEmotion] = useState("Happy");
   const navigate = useNavigate();
+  const API_URL = process.env.REACT_APP_API_URL;
 
   const handleCreatePhotoStrip = async () => {
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/set_photo_strip_settings`,
-
+        `${API_URL}/set_photo_strip_settings`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             frame_color: selectedFrame,
             selected_emotion: selectedEmotion,
@@ -31,12 +33,18 @@ function PhotoStrip() {
         }
       );
 
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
       const data = await response.json();
       console.log("Photo strip settings updated:", data);
 
-      // Navigate to PhotoBooth with selected frame color & emotion
       navigate("/photobooth", {
-        state: { frameColor: selectedFrame, selectedEmotion },
+        state: {
+          frameColor: selectedFrame,
+          selectedEmotion,
+        },
       });
     } catch (error) {
       console.error("Error setting photo strip settings:", error);
@@ -88,8 +96,8 @@ function PhotoStrip() {
             key={frame.id}
             onClick={() => setSelectedFrame(frame.color)}
             className={`px-4 py-2 rounded-full border ${selectedFrame === frame.color
-                ? "bg-gray-900 text-white"
-                : "bg-white text-gray-900"
+              ? "bg-gray-900 text-white"
+              : "bg-white text-gray-900"
               } hover:bg-gray-200`}
             style={{ backgroundColor: frame.color }}
           >
@@ -106,8 +114,8 @@ function PhotoStrip() {
             key={emotion}
             onClick={() => setSelectedEmotion(emotion)}
             className={`px-4 py-2 rounded-full border ${selectedEmotion === emotion
-                ? "bg-[#B7B1F2] text-white"
-                : "bg-white text-[#4B0082]"
+              ? "bg-[#B7B1F2] text-white"
+              : "bg-white text-[#4B0082]"
               } hover:bg-[#A59AE8]`}
           >
             {emotion}
