@@ -1,65 +1,44 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
-const API_URL = process.env.REACT_APP_API_URL;
-
 const PhotoBooth = () => {
   const [capturedImages, setCapturedImages] = useState([]);
+  const [photostrip, setPhotostrip] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-
   const frameColor = location.state?.frameColor || "#FFFFFF";
-  const selectedEmotion = location.state?.selectedEmotion || "happy";
+  const selectedEmotion = location.state?.selectedEmotion || "Happy";
+  const API_URL = process.env.REACT_APP_API_URL;
+
 
   useEffect(() => {
-    if (!API_URL) {
-      console.error("REACT_APP_API_URL is not configured.");
-      return;
-    }
-
-    let isMounted = true;
-    let isNavigating = false;
-
     const fetchImagesAndPhotoStrip = async () => {
       try {
         const response = await fetch(`${API_URL}/get_captured_images`);
 
         if (!response.ok) {
-          throw new Error(
-            `Failed to fetch images: ${response.status}`
-          );
+          throw new Error(`Failed to fetch images: ${response.status}`);
         }
 
         const data = await response.json();
-        const images = data.images || [];
-
-        if (!isMounted) return;
 
         setCapturedImages(
-          images.map((img) => {
-            if (img.startsWith("http://") || img.startsWith("https://")) {
-              return img;
-            }
-
-            return `${API_URL}/${img.replace(/^\/+/, "")}`;
-          })
+          data.images.map(
+            (img) => `${API_URL}/${img.replace(/^\/+/, "")}`
+          )
         );
 
-        if (images.length >= 3 && !isNavigating) {
-          const stripResponse = await fetch(
-            `${API_URL}/get_photostrip`
-          );
+        if (data.images.length >= 3) {
+          const stripResponse = await fetch(`${API_URL}/get_photostrip`);
 
           if (!stripResponse.ok) {
-            throw new Error(
-              `Failed to fetch photostrip: ${stripResponse.status}`
-            );
+            throw new Error(`Failed to fetch photostrip: ${stripResponse.status}`);
           }
 
           const stripData = await stripResponse.json();
 
-          if (isMounted && stripData.photostrip && !isNavigating) {
-            isNavigating = true;
+          if (stripData.photostrip) {
+            setPhotostrip(stripData.photostrip);
 
             navigate("/photostrip-preview", {
               state: {
@@ -74,15 +53,12 @@ const PhotoBooth = () => {
       }
     };
 
-    fetchImagesAndPhotoStrip();
-
     const interval = setInterval(fetchImagesAndPhotoStrip, 3000);
 
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [navigate, frameColor]);
+    fetchImagesAndPhotoStrip();
+
+    return () => clearInterval(interval);
+  }, [API_URL, navigate, frameColor]);
 
 
   return (
