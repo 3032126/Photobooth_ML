@@ -8,21 +8,21 @@ const PhotoStripPreview = () => {
   const frameColor = location.state?.frameColor || "#FFFFFF";
   const API_URL = process.env.REACT_APP_API_URL;
 
-const handleResetCapture = async () => {
-  try {
-    const response = await fetch(`${API_URL}/reset_capture`, {
-      method: "POST",
-    });
+  const handleResetCapture = async () => {
+    try {
+      const response = await fetch(`${API_URL}/reset_capture`, {
+        method: "POST",
+      });
 
-    if (!response.ok) {
-      throw new Error(`Reset failed: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Reset failed: ${response.status}`);
+      }
+
+      navigate("/photobooth");
+    } catch (error) {
+      console.error("Error resetting capture:", error);
     }
-
-    navigate("/photobooth");
-  } catch (error) {
-    console.error("Error resetting capture:", error);
-  }
-};
+  };
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-gradient-to-b from-white to-pink-200 p-6 pt-20">
@@ -50,7 +50,7 @@ const handleResetCapture = async () => {
       <div className="mt-6 flex gap-4">
         <button
           onClick={() =>
-            window.open("http://127.0.0.1:5000/download_photostrip", "_blank")
+            window.open(`${API_URL}/download_photostrip`, "_blank")
           }
           className="bg-[#B7B1F2] text-white px-6 py-3 rounded-full font-semibold shadow-md hover:bg-[#A59AE8] transition"
         >

@@ -13,12 +13,15 @@ const emotions = ["happy", "sad", "surprise"];
 
 function PhotoStrip() {
   const [selectedFrame, setSelectedFrame] = useState(frameColors[0].color);
-  const [selectedEmotion, setSelectedEmotion] = useState("Happy");
+  const [selectedEmotion, setSelectedEmotion] = useState("happy");
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL;
-
   const handleCreatePhotoStrip = async () => {
     try {
+      if (!API_URL) {
+        throw new Error("REACT_APP_API_URL is not configured");
+      }
+
       const response = await fetch(
         `${API_URL}/set_photo_strip_settings`,
         {
