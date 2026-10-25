@@ -174,7 +174,11 @@ const PhotoBooth = () => {
             const result = await response.json();
             if (!stopped) {
               setServerReady(true);
-              setApiError("");
+              setApiError(
+                result.model_error
+                  ? `โหลดโมเดลบนเซิร์ฟเวอร์ไม่สำเร็จ: ${result.model_error}`
+                  : ""
+              );
               setModelLoading(Boolean(result.loading));
               if (!result.busy && !result.loading) {
                 setDetected(result.detected ?? null);

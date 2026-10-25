@@ -8,7 +8,9 @@ import threading
 import traceback
 from werkzeug.exceptions import HTTPException
 from PIL import Image, ImageOps
-from utils.emotion_predictor import predict_emotion  # Import emotion prediction model
+# The emotion model (TensorFlow) is slow and heavy to import, so it is imported lazily
+# in a background thread (see warm_up_model) instead of while the server is booting.
+predict_emotion = None
 
 app = Flask(__name__)
 CORS(app)
@@ -34,6 +36,9 @@ selected_emotion = "happy"  # Default selected emotion
 capture_enabled = True
 countdown_active = False
 countdown_start_time = 0
+last_match_time = 0
+MATCH_GRACE_SECONDS = 1.5  # a brief flicker of the model does not cancel the countdown
+EMOTION_ALIASES = {"happiness": "happy", "sadness": "sad", "surprised": "surprise"}
 countdown_duration = 2  # seconds the emotion must be held before capturing
 photo_limit = 3  # Set capture limit to exactly 3 photos
 
@@ -43,14 +48,29 @@ analysis_lock = threading.Lock()
 # Load the emotion model in the background at startup, so the first real request
 # is not the one that pays the (slow) model-loading cost and hits the gunicorn timeout.
 model_ready = threading.Event()
+model_error = None
 
 
 def warm_up_model():
+    global predict_emotion, model_error
+    started = time.time()
     try:
-        predict_emotion(np.zeros((96, 96, 3), dtype=np.uint8))
-        print("✅ Emotion model warmed up.")
-    except Exception:
-        # even if the dummy input is rejected, the model has been loaded by now
+        os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # quieter TensorFlow logs
+        print("⏳ Importing TensorFlow and loading the emotion model...")
+        from utils.emotion_predictor import predict_emotion as loaded_predictor
+
+        predict_emotion = loaded_predictor
+        print(f"✅ Model loaded in {time.time() - started:.1f} s. Running a warm-up prediction...")
+
+        try:
+            predict_emotion(np.zeros((96, 96, 3), dtype=np.uint8))
+        except Exception:
+            # a dummy image may be rejected, but the model itself is already usable
+            traceback.print_exc()
+
+        print(f"✅ Emotion model warmed up ({time.time() - started:.1f} s total).")
+    except Exception as e:
+        model_error = f"{type(e).__name__}: {e}"
         traceback.print_exc()
     finally:
         model_ready.set()
@@ -64,7 +84,11 @@ face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_fronta
 @app.route("/")
 def health():
     """Open this URL in the browser to wake the Render server up."""
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "status": "ok",
+        "model_ready": model_ready.is_set() and model_error is None,
+        "model_error": model_error,
+    })
 
 
 @app.route("/set_photo_strip_settings", methods=["POST"])
@@ -86,7 +110,7 @@ def set_photo_strip_settings():
 @app.route("/upload_frame", methods=["POST"])
 def upload_frame():
     """Receive one webcam frame from the browser and capture it when the emotion matches."""
-    global countdown_active, countdown_start_time, capture_enabled
+    global countdown_active, countdown_start_time, capture_enabled, last_match_time
 
     file = request.files.get("frame")
     if file is None:
@@ -98,10 +122,14 @@ def upload_frame():
     if not model_ready.is_set():
         return jsonify({"captured": False, "loading": True, "count": len(captured_photos)})
 
+    if model_error or predict_emotion is None:
+        return jsonify({"captured": False, "model_error": model_error or "model not available", "count": len(captured_photos)})
+
     if not analysis_lock.acquire(blocking=False):
         return jsonify({"captured": False, "busy": True, "count": len(captured_photos)})
 
     try:
+        t0 = time.time()
         data = np.frombuffer(file.read(), np.uint8)
         frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
         if frame is None:
@@ -115,24 +143,30 @@ def upload_frame():
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
         faces = [tuple(int(v / scale) for v in f) for f in faces]  # back to full-size coordinates
 
-        wanted_emotion = str(request.form.get("emotion") or selected_emotion).lower()
+        wanted_emotion = str(request.form.get("emotion") or selected_emotion).lower().strip()
+        wanted_emotion = EMOTION_ALIASES.get(wanted_emotion, wanted_emotion)
 
         if len(faces) == 0:
-            countdown_active = False  # face lost: cancel the countdown
-            return jsonify({"captured": False, "detected": None, "counting": False, "count": len(captured_photos)})
+            if countdown_active and time.time() - last_match_time > MATCH_GRACE_SECONDS:
+                countdown_active = False  # face lost for too long: cancel the countdown
+            print(f"No face found ({(time.time() - t0) * 1000:.0f} ms)")
+            return jsonify({"captured": False, "detected": None, "counting": countdown_active, "count": len(captured_photos)})
 
         # use the biggest face in the frame
         x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
         face = frame[y:y + h, x:x + w]
-        predicted_emotion = str(predict_emotion(face)).lower()
+        predicted_emotion = str(predict_emotion(face)).lower().strip()
+        predicted_emotion = EMOTION_ALIASES.get(predicted_emotion, predicted_emotion)
         matches = predicted_emotion == wanted_emotion
-        print(f"Detected: {predicted_emotion} | wanted: {wanted_emotion}")
+        print(f"Detected: {predicted_emotion} | wanted: {wanted_emotion} ({(time.time() - t0) * 1000:.0f} ms)")
 
-        if matches and not countdown_active:
-            countdown_active = True
-            countdown_start_time = time.time()
-        elif countdown_active and not matches:
-            countdown_active = False  # expression changed: cancel
+        if matches:
+            last_match_time = time.time()
+            if not countdown_active:
+                countdown_active = True
+                countdown_start_time = time.time()
+        elif countdown_active and time.time() - last_match_time > MATCH_GRACE_SECONDS:
+            countdown_active = False  # expression changed for too long: cancel
 
         captured = False
         if countdown_active and time.time() - countdown_start_time >= countdown_duration:
