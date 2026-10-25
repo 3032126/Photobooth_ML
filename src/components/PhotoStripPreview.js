@@ -29,7 +29,7 @@ const PhotoStripPreview = () => {
           <img
             src={photostrip}
             className="max-w-[350px] max-h-[800px] rounded-md object-contain"
-            alt="Photo Strip"
+            alt="Captured moments in a strip"
           />
         </div>
       )}
