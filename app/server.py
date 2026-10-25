@@ -1,9 +1,11 @@
-from flask import Flask, Response, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import cv2
+import numpy as np
 import os
 import time
-from PIL import Image, ImageOps, ImageFilter, ImageEnhance
+import threading
+from PIL import Image, ImageOps
 from utils.emotion_predictor import predict_emotion  # Import emotion prediction model
 
 app = Flask(__name__)
@@ -22,9 +24,17 @@ countdown_active = False
 countdown_start_time = 0
 countdown_duration = 2  # seconds the emotion must be held before capturing
 photo_limit = 3  # Set capture limit to exactly 3 photos
-last_debug_log = 0
+
+# Only one frame is analysed at a time; extra uploads are skipped instead of queuing up
+analysis_lock = threading.Lock()
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+
+@app.route("/")
+def health():
+    """Open this URL in the browser to wake the Render server up."""
+    return jsonify({"status": "ok"})
 
 
 @app.route("/set_photo_strip_settings", methods=["POST"])
@@ -43,6 +53,74 @@ def set_photo_strip_settings():
     return jsonify({"message": "Settings updated!", "frame_color": frame_color_selected, "selected_emotion": selected_emotion})
 
 
+@app.route("/upload_frame", methods=["POST"])
+def upload_frame():
+    """Receive one webcam frame from the browser and capture it when the emotion matches."""
+    global countdown_active, countdown_start_time, capture_enabled
+
+    file = request.files.get("frame")
+    if file is None:
+        return jsonify({"error": "missing frame"}), 400
+
+    if not capture_enabled or len(captured_photos) >= photo_limit:
+        return jsonify({"captured": False, "done": True, "count": len(captured_photos)})
+
+    if not analysis_lock.acquire(blocking=False):
+        return jsonify({"captured": False, "busy": True, "count": len(captured_photos)})
+
+    try:
+        data = np.frombuffer(file.read(), np.uint8)
+        frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({"error": "invalid image"}), 400
+
+        frame = cv2.flip(frame, 1)  # mirror, same as the old OpenCV version
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
+
+        wanted_emotion = str(request.form.get("emotion") or selected_emotion).lower()
+
+        if len(faces) == 0:
+            countdown_active = False  # face lost: cancel the countdown
+            return jsonify({"captured": False, "detected": None, "counting": False, "count": len(captured_photos)})
+
+        # use the biggest face in the frame
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+        face = frame[y:y + h, x:x + w]
+        predicted_emotion = str(predict_emotion(face)).lower()
+        matches = predicted_emotion == wanted_emotion
+        print(f"Detected: {predicted_emotion} | wanted: {wanted_emotion}")
+
+        if matches and not countdown_active:
+            countdown_active = True
+            countdown_start_time = time.time()
+        elif countdown_active and not matches:
+            countdown_active = False  # expression changed: cancel
+
+        captured = False
+        if countdown_active and time.time() - countdown_start_time >= countdown_duration:
+            filename = f"static/images/captured_{int(time.time() * 1000)}.jpg"
+            cv2.imwrite(filename, frame)
+            captured_photos.append(filename)
+            countdown_active = False
+            captured = True
+            print(f"✅ Image Captured: {filename}")
+
+            if len(captured_photos) >= photo_limit:
+                generate_photo_strip()
+                capture_enabled = False  # Stop capturing
+                print("✅ Capture complete: 3 images taken.")
+
+        return jsonify({
+            "captured": captured,
+            "detected": predicted_emotion,
+            "counting": countdown_active,
+            "count": len(captured_photos),
+        })
+    finally:
+        analysis_lock.release()
+
+
 @app.route("/get_captured_images", methods=["GET"])
 def get_captured_images():
     """Returns the last 3 captured images"""
@@ -58,86 +136,6 @@ def create_photostrip():
         "message": "Photo strip created successfully!",
         "frame_color": frame_color_selected
     })
-
-
-def open_camera():
-    # CAP_DSHOW opens much more reliably on Windows
-    backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
-    cap = cv2.VideoCapture(0, backend)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 800)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)
-    return cap
-
-
-def generate_frames():
-    """Capture 3 images only when the detected emotion matches the selected emotion."""
-    global countdown_active, countdown_start_time, captured_photos, capture_enabled
-    global last_debug_log
-
-    cap = open_camera()
-    if not cap.isOpened():
-        print("❌ Cannot open camera. Close other apps using it, or try VideoCapture(1).")
-        return
-
-    try:
-        while True:
-            success, frame = cap.read()
-            if not success:
-                break
-
-            frame = cv2.flip(frame, 1)
-            raw_frame = frame.copy()  # keep a clean copy for saving
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
-
-            if len(faces) == 0:
-                countdown_active = False  # face lost: cancel the countdown
-
-            if len(captured_photos) < photo_limit and capture_enabled:
-                for (x, y, w, h) in faces:
-                    face = frame[y:y+h, x:x+w]
-                    predicted_emotion = str(predict_emotion(face)).lower()  # compare case-insensitively
-                    wanted_emotion = str(selected_emotion).lower()
-                    matches = predicted_emotion == wanted_emotion
-
-                    # print what the model sees once per second (helps debugging)
-                    if time.time() - last_debug_log > 1:
-                        print(f"Detected: {predicted_emotion} | wanted: {wanted_emotion}")
-                        last_debug_log = time.time()
-
-                    if matches and not countdown_active:
-                        countdown_active = True
-                        countdown_start_time = time.time()
-                    elif countdown_active and not matches:
-                        countdown_active = False  # expression changed: cancel
-
-                    if countdown_active and time.time() - countdown_start_time >= countdown_duration:
-                        filename = f"static/images/captured_{int(time.time() * 1000)}.jpg"
-                        cv2.imwrite(filename, raw_frame)
-                        captured_photos.append(filename)
-                        countdown_active = False
-                        print(f"✅ Image Captured: {filename}")
-
-                        if len(captured_photos) >= photo_limit:
-                            generate_photo_strip()
-                            capture_enabled = False  # Stop capturing
-                            print("✅ Capture complete: 3 images taken.")
-                        break  # one capture per frame
-
-            ret, buffer = cv2.imencode(".jpg", frame)
-            if not ret:
-                continue
-            yield (b"--frame\r\n"
-                   b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n\r\n")
-    finally:
-        # runs when the browser leaves the page, so the camera is released for the next visit
-        cap.release()
-        print("Camera released.")
-
-
-@app.route("/video_feed")
-def video_feed():
-    return Response(generate_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 def add_logo(photostrip):
@@ -241,4 +239,5 @@ def download_photostrip():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, threaded=True)
+    # Local testing only. On Render the app is started by gunicorn (see start command).
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False, threaded=True)
