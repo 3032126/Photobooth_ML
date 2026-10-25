@@ -51,6 +51,7 @@ const PhotoBooth = () => {
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const [serverReady, setServerReady] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
   const [detected, setDetected] = useState(null);
   const [counting, setCounting] = useState(false);
   const [apiError, setApiError] = useState(
@@ -174,7 +175,8 @@ const PhotoBooth = () => {
             if (!stopped) {
               setServerReady(true);
               setApiError("");
-              if (!result.busy) {
+              setModelLoading(Boolean(result.loading));
+              if (!result.busy && !result.loading) {
                 setDetected(result.detected ?? null);
                 setCounting(Boolean(result.counting));
               }
@@ -300,7 +302,13 @@ const PhotoBooth = () => {
         </p>
       )}
 
-      {serverReady && (
+      {serverReady && modelLoading && (
+        <p className="mt-3 max-w-[800px] text-center text-sm text-gray-600">
+          กำลังโหลดโมเดลตรวจสีหน้า... ครั้งแรกอาจใช้เวลาประมาณ 1 นาที
+        </p>
+      )}
+
+      {serverReady && !modelLoading && (
         <p className="mt-3 text-sm text-gray-600">
           {detected ? `ตรวจพบสีหน้า: ${detected}` : "ไม่พบใบหน้า"}
           {counting ? " — ค้างไว้! กำลังจะถ่าย" : ""}

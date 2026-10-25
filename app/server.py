@@ -5,11 +5,23 @@ import numpy as np
 import os
 import time
 import threading
+import traceback
+from werkzeug.exceptions import HTTPException
 from PIL import Image, ImageOps
 from utils.emotion_predictor import predict_emotion  # Import emotion prediction model
 
 app = Flask(__name__)
 CORS(app)
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Return real errors as JSON (with CORS headers) instead of a bare crash."""
+    if isinstance(e, HTTPException):
+        return e
+    traceback.print_exc()  # full error appears in the Render logs
+    return jsonify({"error": str(e)}), 500
+
 
 # Ensure directories exist
 os.makedirs("static/images", exist_ok=True)
@@ -27,6 +39,24 @@ photo_limit = 3  # Set capture limit to exactly 3 photos
 
 # Only one frame is analysed at a time; extra uploads are skipped instead of queuing up
 analysis_lock = threading.Lock()
+
+# Load the emotion model in the background at startup, so the first real request
+# is not the one that pays the (slow) model-loading cost and hits the gunicorn timeout.
+model_ready = threading.Event()
+
+
+def warm_up_model():
+    try:
+        predict_emotion(np.zeros((96, 96, 3), dtype=np.uint8))
+        print("✅ Emotion model warmed up.")
+    except Exception:
+        # even if the dummy input is rejected, the model has been loaded by now
+        traceback.print_exc()
+    finally:
+        model_ready.set()
+
+
+threading.Thread(target=warm_up_model, daemon=True).start()
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
@@ -65,6 +95,9 @@ def upload_frame():
     if not capture_enabled or len(captured_photos) >= photo_limit:
         return jsonify({"captured": False, "done": True, "count": len(captured_photos)})
 
+    if not model_ready.is_set():
+        return jsonify({"captured": False, "loading": True, "count": len(captured_photos)})
+
     if not analysis_lock.acquire(blocking=False):
         return jsonify({"captured": False, "busy": True, "count": len(captured_photos)})
 
@@ -75,8 +108,12 @@ def upload_frame():
             return jsonify({"error": "invalid image"}), 400
 
         frame = cv2.flip(frame, 1)  # mirror, same as the old OpenCV version
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
+        # detect faces on a smaller copy (much faster on Render's small CPU)
+        scale = 480.0 / frame.shape[1] if frame.shape[1] > 480 else 1.0
+        small = cv2.resize(frame, None, fx=scale, fy=scale) if scale < 1.0 else frame
+        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+        faces = [tuple(int(v / scale) for v in f) for f in faces]  # back to full-size coordinates
 
         wanted_emotion = str(request.form.get("emotion") or selected_emotion).lower()
 
