@@ -8,16 +8,16 @@ const PhotoBooth = () => {
   const location = useLocation();
   const frameColor = location.state?.frameColor || "#FFFFFF";
   const selectedEmotion = location.state?.selectedEmotion || "Happy";
-
+  const API_URL = process.env.REACT_APP_API_URL;
   useEffect(() => {
     const fetchImagesAndPhotoStrip = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:5000/get_captured_images");
+        const response = await fetch("fetch(`${API_URL}/get_captured_images`)");
         const data = await response.json();
         setCapturedImages(data.images.map(img => `http://127.0.0.1:5000/${img}`));
 
         if (data.images.length >= 3) {
-          const stripResponse = await fetch("http://127.0.0.1:5000/get_photostrip");
+          const stripResponse = await fetch("fetch(`${API_URL}/get_photostrip`)");
           const stripData = await stripResponse.json();
           if (stripData.photostrip) {
             setPhotostrip(stripData.photostrip);
@@ -45,7 +45,7 @@ const PhotoBooth = () => {
 
       {/* Live Video Feed */}
       <div className="relative">
-        <img src="http://127.0.0.1:5000/video_feed" alt="Live Video" className="w-[800px] h-[600px] border-4" style={{ borderColor: frameColor }} />
+        <img src="fetch(`${API_URL}/video_feed`)" alt="Live Video" className="w-[800px] h-[600px] border-4" style={{ borderColor: frameColor }} />
       </div>
 
       {/* Show Captured Images */}
