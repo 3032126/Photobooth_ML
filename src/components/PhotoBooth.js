@@ -1,20 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
-// Strip trailing slash so `${API_URL}/path` never becomes `//path`
 const API_URL = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
 const POLL_INTERVAL_MS = 3000;
 const REQUIRED_IMAGES = 3;
 
-// Headers sent with every API request.
-// "ngrok-skip-browser-warning" stops ngrok's free tier from returning its HTML warning page
-// instead of JSON (a common cause of "Unexpected token '<'"). Harmless for other servers.
+// ngrok free tier returns an HTML warning page unless this header is sent
 const API_HEADERS = {
   Accept: "application/json",
   "ngrok-skip-browser-warning": "true",
 };
 
-// Fetch JSON and throw a readable error if the server returns HTML or an error status
 const fetchJson = async (url, signal) => {
   const response = await fetch(url, { headers: API_HEADERS, signal });
 
@@ -34,36 +30,18 @@ const fetchJson = async (url, signal) => {
   return response.json();
 };
 
-// Map getUserMedia errors to a message the user can act on
-const cameraErrorMessage = (error) => {
-  switch (error?.name) {
-    case "NotAllowedError":
-    case "SecurityError":
-      return "Camera permission was denied. Please allow camera access in your browser settings.";
-    case "NotFoundError":
-    case "OverconstrainedError":
-      return "No suitable camera was found on this device.";
-    case "NotReadableError":
-      return "The camera is being used by another app (for example the backend or a video call). Close it and reload.";
-    default:
-      return error?.message || "Cannot access your camera.";
-  }
-};
-
-const toAbsoluteUrl = (img) => {
-  if (/^(https?:|data:|blob:)/i.test(img)) return img;
-  return `${API_URL}/${String(img).replace(/^\/+/, "")}`;
-};
-
 const PhotoBooth = () => {
   const [capturedImages, setCapturedImages] = useState([]);
-  const [cameraError, setCameraError] = useState("");
+  const [videoError, setVideoError] = useState("");
   const [apiError, setApiError] = useState(
-    API_URL ? "" : "REACT_APP_API_URL is not configured. Add it to .env and restart the dev server."
+    API_URL
+      ? ""
+      : "ไม่พบ REACT_APP_API_URL กรุณาเพิ่มในไฟล์ .env แล้วรัน npm start ใหม่"
   );
 
-  const videoRef = useRef(null);
-  const isNavigatingRef = useRef(false); // survives effect re-runs, unlike a local variable
+  const isNavigatingRef = useRef(false);
+  // Stable per-visit value so retaken photos are never served from the browser cache
+  const cacheKeyRef = useRef(Date.now());
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,72 +49,20 @@ const PhotoBooth = () => {
   const frameColor = location.state?.frameColor || "#FFFFFF";
   const selectedEmotion = location.state?.selectedEmotion || "happy";
 
-  // Open the user's webcam in the browser
+  const toAbsoluteUrl = (img, bust = false) => {
+    const url = /^(https?:|data:|blob:)/i.test(img)
+      ? img
+      : `${API_URL}/${String(img).replace(/^\/+/, "")}`;
+    if (!bust || /^(data:|blob:)/i.test(url)) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}v=${cacheKeyRef.current}`;
+  };
+
+  // Poll the backend for captured images and the finished photo strip
   useEffect(() => {
-    let stream = null;
-    let cancelled = false; // handles unmount (and React StrictMode double-mount) during the await
-
-    const startCamera = async () => {
-      try {
-        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-          throw new Error(
-            "Camera access needs HTTPS or http://localhost and a supported browser."
-          );
-        }
-
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 800 }, height: { ideal: 600 } },
-          audio: false,
-        });
-
-        if (cancelled) {
-          // Component unmounted while waiting for permission: release the camera immediately
-          mediaStream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        stream = mediaStream;
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          try {
-            await videoRef.current.play();
-          } catch (playError) {
-            // AbortError happens when srcObject changes or the element unmounts; safe to ignore
-            if (playError.name !== "AbortError") throw playError;
-          }
-        }
-
-        setCameraError("");
-      } catch (error) {
-        if (cancelled) return;
-        console.error("Camera error:", error);
-        setCameraError(cameraErrorMessage(error));
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      cancelled = true;
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    };
-  }, []);
-
-  // Poll the backend for captured images and the completed photo strip
-  useEffect(() => {
-    if (!API_URL) {
-      console.error("REACT_APP_API_URL is not configured.");
-      return;
-    }
+    if (!API_URL) return;
 
     let isMounted = true;
-    let inFlight = false; // prevents overlapping requests when the backend is slow
+    let inFlight = false;
     const controller = new AbortController();
 
     const fetchImagesAndPhotoStrip = async () => {
@@ -151,7 +77,7 @@ const PhotoBooth = () => {
         if (!isMounted) return;
 
         const images = Array.isArray(data.images) ? data.images : [];
-        setCapturedImages(images.map(toAbsoluteUrl));
+        setCapturedImages(images.map((img) => toAbsoluteUrl(img, true)));
         setApiError("");
 
         if (images.length >= REQUIRED_IMAGES) {
@@ -164,8 +90,9 @@ const PhotoBooth = () => {
             isNavigatingRef.current = true;
             navigate("/photostrip-preview", {
               state: {
-                photostrip: toAbsoluteUrl(stripData.photostrip),
+                photostrip: toAbsoluteUrl(stripData.photostrip, true),
                 frameColor,
+                selectedEmotion,
               },
             });
           }
@@ -187,29 +114,41 @@ const PhotoBooth = () => {
       clearInterval(interval);
       controller.abort();
     };
-  }, [navigate, frameColor]);
+    // toAbsoluteUrl only reads a ref and the module-level API_URL, so it is safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, frameColor, selectedEmotion]);
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-100 p-4">
       <h1 className="text-4xl font-bold text-purple-700">Photobooth</h1>
 
-      <h2 className="mt-6 text-xl font-medium text-gray-700">
+      <h2 className="mt-6 text-xl font-medium text-gray-700 capitalize">
         Selected Emotion: {selectedEmotion}
       </h2>
 
-      {/* Browser webcam */}
+      <p className="mt-1 text-sm text-gray-500">
+        แสดงสีหน้า &quot;{selectedEmotion}&quot; ค้างไว้ประมาณ 2 วินาที
+        ระบบจะถ่ายให้อัตโนมัติ
+      </p>
+
+      {/* Live video stream from the backend camera (OpenCV) */}
       <div className="relative mt-4 w-full max-w-[800px]">
-        {cameraError ? (
-          <p className="text-center text-red-600">{cameraError}</p>
-        ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
+        {API_URL && (
+          <img
+            src={`${API_URL}/video_feed`}
+            alt="Live Video"
             className="w-full border-4"
             style={{ borderColor: frameColor }}
+            onLoad={() => setVideoError("")}
+            onError={() =>
+              setVideoError(
+                "เชื่อมต่อกล้องไม่ได้ ตรวจสอบว่า backend ทำงานอยู่ และไม่มีโปรแกรมหรือแท็บอื่นใช้กล้องอยู่"
+              )
+            }
           />
+        )}
+        {videoError && (
+          <p className="mt-2 text-center text-red-600">{videoError}</p>
         )}
       </div>
 
@@ -223,7 +162,6 @@ const PhotoBooth = () => {
         {capturedImages.length} / {REQUIRED_IMAGES} photos
       </p>
 
-      {/* Captured images */}
       <div className="mt-4 flex flex-wrap justify-center gap-4">
         {capturedImages.map((img, index) => (
           <img
