@@ -9,7 +9,6 @@ const PhotoBooth = () => {
   const frameColor = location.state?.frameColor || "#FFFFFF";
   const selectedEmotion = location.state?.selectedEmotion || "Happy";
   const API_URL = process.env.REACT_APP_API_URL;
-  const API_URL = process.env.REACT_APP_API_URL;
 
   useEffect(() => {
     const fetchImagesAndPhotoStrip = async () => {
