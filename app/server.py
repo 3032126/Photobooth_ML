@@ -185,7 +185,7 @@ def get_photostrip():
                 combined.convert("RGB").save(updated_photostrip, "JPEG", quality=95)
 
                 return jsonify({
-                    "photostrip": f"http://127.0.0.1:5000/{updated_photostrip}",
+                    "photostrip": request.host_url.rstrip("/") + f"/{updated_photostrip}",
                     "frame_color": frame_color_selected,
                     "selected_emotion": selected_emotion
                 })
