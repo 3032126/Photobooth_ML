@@ -49,15 +49,17 @@ const PhotoBooth = () => {
       </div>
 
       {/* Show Captured Images */}
+
       {capturedImages.map((img, index) => (
         <img
           key={index}
           src={img}
-          alt={`Captured photo ${index + 1}`}
+          alt={`Captured portrait ${index + 1}`}
           className="w-[200px] h-[150px] border-2"
           style={{ borderColor: frameColor }}
         />
       ))}
+
     </div>
   );
 };
