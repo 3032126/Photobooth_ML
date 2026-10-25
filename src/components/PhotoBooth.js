@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL?.replace(/\/+$/, "");
 
 const PhotoBooth = () => {
   const [capturedImages, setCapturedImages] = useState([]);
   const [cameraError, setCameraError] = useState("");
+  const [apiError, setApiError] = useState("");
   const videoRef = useRef(null);
 
   const navigate = useNavigate();
@@ -14,22 +15,26 @@ const PhotoBooth = () => {
   const frameColor = location.state?.frameColor || "#FFFFFF";
   const selectedEmotion = location.state?.selectedEmotion || "happy";
 
-  // Open the user's webcam in the browser
+  // Start browser webcam
   useEffect(() => {
     let stream;
+    let cancelled = false;
 
     const startCamera = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error(
-            "Camera access is unavailable. Please use HTTPS and a supported browser."
-          );
+          throw new Error("Browser camera API is unavailable.");
         }
 
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 800, height: 600 },
           audio: false,
         });
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -40,7 +45,7 @@ const PhotoBooth = () => {
       } catch (error) {
         console.error("Camera error:", error);
         setCameraError(
-          "Cannot access your camera. Please allow camera permission in your browser."
+          "เปิดกล้องไม่ได้ กรุณาอนุญาต Camera Permission ในเบราว์เซอร์"
         );
       }
     };
@@ -48,48 +53,57 @@ const PhotoBooth = () => {
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      cancelled = true;
+      stream?.getTracks().forEach((track) => track.stop());
     };
   }, []);
 
-  // Poll the backend for captured images and the completed photo strip
+  // Poll backend for captured images and photo strip
   useEffect(() => {
     if (!API_URL) {
-      console.error("REACT_APP_API_URL is not configured.");
+      setApiError("ไม่พบ REACT_APP_API_URL กรุณาตรวจสอบการตั้งค่า");
       return;
     }
 
     let isMounted = true;
     let isNavigating = false;
 
+    const getImageUrl = (path) => {
+      if (/^https?:\/\//i.test(path)) {
+        return path;
+      }
+
+      return `${API_URL}/${String(path).replace(/^\/+/, "")}`;
+    };
+
     const fetchImagesAndPhotoStrip = async () => {
       try {
-        const response = await fetch(`${API_URL}/get_captured_images`);
+        const response = await fetch(
+          `${API_URL}/get_captured_images`
+        );
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch images: ${response.status}`);
+          throw new Error(
+            `/get_captured_images returned HTTP ${response.status}`
+          );
         }
 
         const data = await response.json();
-        const images = data.images || [];
+        const images = Array.isArray(data.images) ? data.images : [];
 
         if (!isMounted) return;
 
-        setCapturedImages(
-          images.map((img) => {
-            if (/^https?:\/\//i.test(img)) return img;
-            return `${API_URL}/${img.replace(/^\/+/, "")}`;
-          })
-        );
+        setApiError("");
+        setCapturedImages(images.map(getImageUrl));
 
         if (images.length >= 3 && !isNavigating) {
-          const stripResponse = await fetch(`${API_URL}/get_photostrip`);
+          const stripResponse = await fetch(
+            `${API_URL}/get_photostrip`
+          );
 
           if (!stripResponse.ok) {
             throw new Error(
-              `Failed to fetch photostrip: ${stripResponse.status}`
+              `/get_photostrip returned HTTP ${stripResponse.status}`
             );
           }
 
@@ -100,14 +114,19 @@ const PhotoBooth = () => {
 
             navigate("/photostrip-preview", {
               state: {
-                photostrip: stripData.photostrip,
+                photostrip: getImageUrl(stripData.photostrip),
                 frameColor,
+                selectedEmotion,
               },
             });
           }
         }
       } catch (error) {
-        console.error("Error fetching images:", error);
+        console.error("PhotoBooth API error:", error);
+
+        if (isMounted) {
+          setApiError(error.message);
+        }
       }
     };
 
@@ -119,7 +138,7 @@ const PhotoBooth = () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [navigate, frameColor]);
+  }, [navigate, frameColor, selectedEmotion]);
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-100 p-4">
@@ -131,25 +150,27 @@ const PhotoBooth = () => {
         Selected Emotion: {selectedEmotion}
       </h2>
 
-      {/* Browser webcam */}
-      <div className="relative mt-4">
+      <div className="relative mt-4 w-full max-w-[800px]">
         {cameraError ? (
-          <p className="max-w-lg text-center text-red-600">
-            {cameraError}
-          </p>
+          <p className="text-center text-red-600">{cameraError}</p>
         ) : (
           <video
             ref={videoRef}
             autoPlay
             muted
             playsInline
-            className="w-full max-w-[800px] border-4"
+            className="w-full border-4"
             style={{ borderColor: frameColor }}
           />
         )}
       </div>
 
-      {/* Captured images */}
+      {apiError && (
+        <p className="mt-4 max-w-xl break-words text-center text-red-600">
+          ไม่สามารถโหลดข้อมูลจาก Backend ได้: {apiError}
+        </p>
+      )}
+
       <div className="mt-4 flex flex-wrap justify-center gap-4">
         {capturedImages.map((img, index) => (
           <img
@@ -158,6 +179,9 @@ const PhotoBooth = () => {
             alt={`Captured portrait ${index + 1}`}
             className="h-[150px] w-[200px] border-2 object-cover"
             style={{ borderColor: frameColor }}
+            onError={() =>
+              console.error("Failed to load captured image:", img)
+            }
           />
         ))}
       </div>
