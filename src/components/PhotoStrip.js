@@ -19,7 +19,8 @@ function PhotoStrip() {
   const handleCreatePhotoStrip = async () => {
     try {
       const response = await fetch(
-        "http://127.0.0.1:5000/set_photo_strip_settings",
+        `${process.env.REACT_APP_API_URL}/set_photo_strip_settings`,
+
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -86,11 +87,10 @@ function PhotoStrip() {
           <button
             key={frame.id}
             onClick={() => setSelectedFrame(frame.color)}
-            className={`px-4 py-2 rounded-full border ${
-              selectedFrame === frame.color
+            className={`px-4 py-2 rounded-full border ${selectedFrame === frame.color
                 ? "bg-gray-900 text-white"
                 : "bg-white text-gray-900"
-            } hover:bg-gray-200`}
+              } hover:bg-gray-200`}
             style={{ backgroundColor: frame.color }}
           >
             {frame.name}
@@ -105,11 +105,10 @@ function PhotoStrip() {
           <button
             key={emotion}
             onClick={() => setSelectedEmotion(emotion)}
-            className={`px-4 py-2 rounded-full border ${
-              selectedEmotion === emotion
+            className={`px-4 py-2 rounded-full border ${selectedEmotion === emotion
                 ? "bg-[#B7B1F2] text-white"
                 : "bg-white text-[#4B0082]"
-            } hover:bg-[#A59AE8]`}
+              } hover:bg-[#A59AE8]`}
           >
             {emotion}
           </button>

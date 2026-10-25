@@ -12,12 +12,14 @@ const PhotoBooth = () => {
   useEffect(() => {
     const fetchImagesAndPhotoStrip = async () => {
       try {
-        const response = await fetch("fetch(`${API_URL}/get_captured_images`)");
+        const response = await fetch(`${API_URL}/get_captured_images`);
         const data = await response.json();
-        setCapturedImages(data.images.map(img => `http://127.0.0.1:5000/${img}`));
+        setCapturedImages(
+          data.images.map((img) => `${API_URL}/${img.replace(/^\/+/, "")}`)
+        );
 
         if (data.images.length >= 3) {
-          const stripResponse = await fetch("fetch(`${API_URL}/get_photostrip`)");
+          const stripResponse = await fetch(`${API_URL}/get_photostrip`);
           const stripData = await stripResponse.json();
           if (stripData.photostrip) {
             setPhotostrip(stripData.photostrip);
