@@ -40,7 +40,8 @@ const PhotoBooth = () => {
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-100">
       <h1 className="text-4xl font-bold text-purple-700">Photobooth</h1>
-      <h2 className="text-xl font-medium text-gray-700">Selected Emotion: {selectedEmotion}</h2>
+      <h2 className="mt-6 text-xl font-medium text-gray-700">Selected Emotion: {selectedEmotion}</h2>
+
 
       {/* Live Video Feed */}
       <div className="relative">
@@ -48,13 +49,15 @@ const PhotoBooth = () => {
       </div>
 
       {/* Show Captured Images */}
-      {capturedImages.length > 0 && (
-        <div className="mt-4 flex space-x-2">
-          {capturedImages.map((img, index) => (
-            <img key={index} src={img} className="w-[200px] h-[150px] border-2" style={{ borderColor: frameColor }} />
-          ))}
-        </div>
-      )}
+      {capturedImages.map((img, index) => (
+        <img
+          key={index}
+          src={img}
+          alt={`Captured photo ${index + 1}`}
+          className="w-[200px] h-[150px] border-2"
+          style={{ borderColor: frameColor }}
+        />
+      ))}
     </div>
   );
 };
