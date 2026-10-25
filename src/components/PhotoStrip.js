@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 const frameColors = [
   { id: 1, name: "Blue", color: "#9DC3E2" },
   { id: 2, name: "Pink", color: "#FFB5CC" },
@@ -12,16 +14,28 @@ const frameColors = [
 const emotions = ["happy", "sad", "surprise"];
 
 function PhotoStrip() {
-  const [selectedFrame, setSelectedFrame] = useState(frameColors[0].color);
+  const [selectedFrame, setSelectedFrame] = useState(
+    frameColors[0].color
+  );
   const [selectedEmotion, setSelectedEmotion] = useState("happy");
-  const navigate = useNavigate();
-  const API_URL = process.env.REACT_APP_API_URL;
-  const handleCreatePhotoStrip = async () => {
-    try {
-      if (!API_URL) {
-        throw new Error("REACT_APP_API_URL is not configured");
-      }
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
+  const navigate = useNavigate();
+
+  const handleCreatePhotoStrip = async () => {
+    if (loading) return;
+
+    setError("");
+
+    if (!API_URL) {
+      setError("ไม่พบการตั้งค่า API URL กรุณาตรวจสอบ Environment Variables");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
       const response = await fetch(
         `${API_URL}/set_photo_strip_settings`,
         {
@@ -49,59 +63,68 @@ function PhotoStrip() {
           selectedEmotion,
         },
       });
-    } catch (error) {
-      console.error("Error setting photo strip settings:", error);
+    } catch (err) {
+      console.error("Error setting photo strip settings:", err);
+      setError(
+        "ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง"
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-white to-pink-200 p-6">
-      {/* Title */}
-      <h2 className="text-3xl font-bold text-gray-900">Photo Strip Preview</h2>
-      <p className="mt-2 text-gray-600">
+      <h2 className="text-3xl font-bold text-gray-900">
+        Photo Strip Preview
+      </h2>
+
+      <p className="mt-2 text-gray-600 text-center">
         เลือกเฟรมที่ใช่และสีหน้าที่คุณต้องการ
       </p>
 
-      {/* Photo Strip Frame */}
+      {/* Photo Strip Frame Preview */}
       <div
-        className="mt-6 p-6 rounded-lg shadow-lg relative w-48 h-[500px] flex flex-col items-center justify-between"
-        style={{
-          background: selectedFrame,
-          padding: "10px",
-          borderRadius: "12px",
-          boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
-        }}
+        className="mt-6 w-48 h-[500px] p-3 rounded-xl shadow-lg flex flex-col items-center justify-between"
+        style={{ backgroundColor: selectedFrame }}
       >
-        {[1, 2, 3].map((_, index) => (
+        {[1, 2, 3].map((item) => (
           <div
-            key={index}
-            className="relative w-[90%] h-[120px] bg-black rounded-md flex items-center justify-center"
+            key={item}
+            className="w-[90%] h-[120px] bg-black rounded-md flex items-center justify-center"
           >
-            <span className="text-gray-300"></span>
+            <span className="text-gray-400 text-sm">
+              Photo {item}
+            </span>
           </div>
         ))}
 
-        {/* Bottom Logo */}
         <div className="w-full h-[40px] flex items-center justify-center">
           <img
             src="/logo.png"
             alt="Kreamera"
-            className="w-20 opacity-100 drop-shadow-lg"
+            className="w-20 object-contain drop-shadow-lg"
           />
         </div>
       </div>
 
       {/* Frame Color Selection */}
-      <h3 className="mt-4 text-lg font-semibold">Frame Color</h3>
-      <div className="mt-2 flex gap-3">
+      <h3 className="mt-5 text-lg font-semibold text-gray-900">
+        Frame Color
+      </h3>
+
+      <div className="mt-3 flex flex-wrap justify-center gap-3">
         {frameColors.map((frame) => (
           <button
             key={frame.id}
+            type="button"
             onClick={() => setSelectedFrame(frame.color)}
-            className={`px-4 py-2 rounded-full border ${selectedFrame === frame.color
-              ? "bg-gray-900 text-white"
-              : "bg-white text-gray-900"
-              } hover:bg-gray-200`}
+            aria-pressed={selectedFrame === frame.color}
+            className={`px-4 py-2 rounded-full border-2 transition ${
+              selectedFrame === frame.color
+                ? "border-gray-900 font-bold shadow-md"
+                : "border-white hover:border-gray-400"
+            } text-gray-900`}
             style={{ backgroundColor: frame.color }}
           >
             {frame.name}
@@ -110,30 +133,47 @@ function PhotoStrip() {
       </div>
 
       {/* Emotion Selection */}
-      <h3 className="mt-6 text-lg font-semibold">Choose Emotion</h3>
-      <div className="mt-2 flex gap-3 flex-wrap justify-center">
+      <h3 className="mt-6 text-lg font-semibold text-gray-900">
+        Choose Emotion
+      </h3>
+
+      <div className="mt-3 flex flex-wrap justify-center gap-3">
         {emotions.map((emotion) => (
           <button
             key={emotion}
+            type="button"
             onClick={() => setSelectedEmotion(emotion)}
-            className={`px-4 py-2 rounded-full border ${selectedEmotion === emotion
-              ? "bg-[#B7B1F2] text-white"
-              : "bg-white text-[#4B0082]"
-              } hover:bg-[#A59AE8]`}
+            aria-pressed={selectedEmotion === emotion}
+            className={`px-4 py-2 rounded-full border transition capitalize ${
+              selectedEmotion === emotion
+                ? "bg-[#8B7FE8] text-white border-[#8B7FE8] font-semibold"
+                : "bg-white text-[#4B0082] border-purple-200 hover:bg-purple-100"
+            }`}
           >
             {emotion}
           </button>
         ))}
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 text-center text-red-600"
+        >
+          {error}
+        </p>
+      )}
+
       {/* Take Photo Button */}
-      <div className="mt-6 flex items-center justify-center gap-x-6">
+      <div className="mt-6 flex justify-center">
         <button
-          className="rounded-md bg-[#B7B1F2] px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#A59AE8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B7B1F2]"
           type="button"
           onClick={handleCreatePhotoStrip}
+          disabled={loading}
+          className="rounded-full bg-[#B7B1F2] px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#A59AE8] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Take Photo
+          {loading ? "Connecting..." : "Take Photo"}
         </button>
       </div>
     </div>
