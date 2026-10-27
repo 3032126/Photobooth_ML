@@ -8,11 +8,17 @@ import threading
 import traceback
 from werkzeug.exceptions import HTTPException
 from PIL import Image, ImageOps
-# The emotion model (TensorFlow) is slow and heavy to import, so it is imported lazily
-# in a background thread (see warm_up_model) instead of while the server is booting.
-predict_emotion = None
 
-app = Flask(__name__)
+# All files are resolved relative to this file, so it works no matter where gunicorn is started
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def fs(relative_path):
+    """Absolute path on disk for a path like 'static/images/x.jpg' (the URL keeps the relative form)."""
+    return os.path.join(BASE_DIR, relative_path)
+
+
+app = Flask(__name__, static_folder=fs("static"))
 CORS(app)
 
 
@@ -26,8 +32,8 @@ def handle_exception(e):
 
 
 # Ensure directories exist
-os.makedirs("static/images", exist_ok=True)
-os.makedirs("static/photostrips", exist_ok=True)
+os.makedirs(fs("static/images"), exist_ok=True)
+os.makedirs(fs("static/photostrips"), exist_ok=True)
 
 captured_photos = []
 current_photostrip = None  # path of the finished strip for the current session
@@ -45,38 +51,19 @@ photo_limit = 3  # Set capture limit to exactly 3 photos
 # Only one frame is analysed at a time; extra uploads are skipped instead of queuing up
 analysis_lock = threading.Lock()
 
-# Load the emotion model in the background at startup, so the first real request
-# is not the one that pays the (slow) model-loading cost and hits the gunicorn timeout.
-model_ready = threading.Event()
+# The emotion model runs on plain NumPy (utils/emotion_predictor.py + model/weights.npz),
+# so it loads in milliseconds and needs almost no RAM. (TensorFlow needed ~550 MB, which is
+# more than a 512 MB Render instance has, so the server was being killed.)
+predict_emotion = None
 model_error = None
+try:
+    from utils.emotion_predictor import predict_emotion
 
-
-def warm_up_model():
-    global predict_emotion, model_error
-    started = time.time()
-    try:
-        os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")  # quieter TensorFlow logs
-        print("⏳ Importing TensorFlow and loading the emotion model...")
-        from utils.emotion_predictor import predict_emotion as loaded_predictor
-
-        predict_emotion = loaded_predictor
-        print(f"✅ Model loaded in {time.time() - started:.1f} s. Running a warm-up prediction...")
-
-        try:
-            predict_emotion(np.zeros((96, 96, 3), dtype=np.uint8))
-        except Exception:
-            # a dummy image may be rejected, but the model itself is already usable
-            traceback.print_exc()
-
-        print(f"✅ Emotion model warmed up ({time.time() - started:.1f} s total).")
-    except Exception as e:
-        model_error = f"{type(e).__name__}: {e}"
-        traceback.print_exc()
-    finally:
-        model_ready.set()
-
-
-threading.Thread(target=warm_up_model, daemon=True).start()
+    predict_emotion(np.zeros((96, 96, 3), dtype=np.uint8))  # quick self-test
+    print("✅ Emotion model loaded (NumPy).")
+except Exception as e:
+    model_error = f"{type(e).__name__}: {e}"
+    traceback.print_exc()
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
@@ -86,7 +73,7 @@ def health():
     """Open this URL in the browser to wake the Render server up."""
     return jsonify({
         "status": "ok",
-        "model_ready": model_ready.is_set() and model_error is None,
+        "model_ready": model_error is None,
         "model_error": model_error,
     })
 
@@ -118,9 +105,6 @@ def upload_frame():
 
     if not capture_enabled or len(captured_photos) >= photo_limit:
         return jsonify({"captured": False, "done": True, "count": len(captured_photos)})
-
-    if not model_ready.is_set():
-        return jsonify({"captured": False, "loading": True, "count": len(captured_photos)})
 
     if model_error or predict_emotion is None:
         return jsonify({"captured": False, "model_error": model_error or "model not available", "count": len(captured_photos)})
@@ -171,7 +155,7 @@ def upload_frame():
         captured = False
         if countdown_active and time.time() - countdown_start_time >= countdown_duration:
             filename = f"static/images/captured_{int(time.time() * 1000)}.jpg"
-            cv2.imwrite(filename, frame)
+            cv2.imwrite(fs(filename), frame)
             captured_photos.append(filename)
             countdown_active = False
             captured = True
@@ -211,7 +195,7 @@ def create_photostrip():
 
 def add_logo(photostrip):
     """Place the logo at the bottom center of the strip. Returns an RGB image."""
-    logo_path = "static/logo.png"
+    logo_path = fs("static/logo.png")
     if not os.path.exists(logo_path):
         return photostrip.convert("RGB")
 
@@ -244,7 +228,7 @@ def generate_photo_strip():
     if len(captured_photos) < photo_limit:
         return
 
-    images = [Image.open(photo) for photo in captured_photos[-photo_limit:]]
+    images = [Image.open(fs(photo)) for photo in captured_photos[-photo_limit:]]
     widths, heights = zip(*(i.size for i in images))
     strip_width = max(widths) + 42
     strip_height = sum(heights) + 500
@@ -261,7 +245,7 @@ def generate_photo_strip():
     photostrip = add_logo(photostrip)
 
     photostrip_filename = f"static/photostrips/photostrip_{int(time.time() * 1000)}.jpg"
-    photostrip.save(photostrip_filename, "JPEG", quality=95)
+    photostrip.save(fs(photostrip_filename), "JPEG", quality=95)
     current_photostrip = photostrip_filename
     print(f"✅ Photo strip generated with color {frame_color_selected}: {photostrip_filename}")
 
@@ -269,7 +253,7 @@ def generate_photo_strip():
 @app.route("/get_photostrip", methods=["GET"])
 def get_photostrip():
     # Only return the strip made in THIS session (never an old one, never stack the logo twice)
-    if current_photostrip and os.path.exists(current_photostrip):
+    if current_photostrip and os.path.exists(fs(current_photostrip)):
         return jsonify({
             "photostrip": current_photostrip,  # relative path, the frontend adds the API URL
             "frame_color": frame_color_selected,
@@ -285,9 +269,9 @@ def reset_capture():
     global captured_photos, capture_enabled, countdown_active, current_photostrip
 
     for folder in ("static/images", "static/photostrips"):
-        for file in os.listdir(folder):
+        for file in os.listdir(fs(folder)):
             try:
-                os.remove(os.path.join(folder, file))
+                os.remove(os.path.join(fs(folder), file))
             except OSError as e:
                 print(f"Could not delete {file}: {e}")
 
@@ -304,8 +288,8 @@ def reset_capture():
 @app.route("/download_photostrip", methods=["GET"])
 def download_photostrip():
     """Allow users to download the latest generated photostrip"""
-    if current_photostrip and os.path.exists(current_photostrip):
-        return send_file(current_photostrip, as_attachment=True, download_name="photostrip.jpg")
+    if current_photostrip and os.path.exists(fs(current_photostrip)):
+        return send_file(fs(current_photostrip), as_attachment=True, download_name="photostrip.jpg")
     return jsonify({"error": "No photostrip available"}), 404
 
 
